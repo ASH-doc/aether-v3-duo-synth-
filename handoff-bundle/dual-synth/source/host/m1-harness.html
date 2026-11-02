@@ -52,22 +52,32 @@ pre#log { background:#0e0f12; border:1px solid var(--line); border-radius:6px; p
     logEl.textContent += '[' + ((performance.now() - t0) / 1000).toFixed(2) + 's] ' + m + '\n';
     logEl.scrollTop = logEl.scrollHeight;
   }
-  let ctx = null, synth = null, started = false, nextId = 1, shift = 0;
+  let ctx = null, synth = null, started = false, nextId = 1, shift = 0, panicUntil = 0;
   const held = new Map();
   const keyEls = new Map();
 
-  function on(key, note, vel) {
-    if (!synth || held.has(key)) return;
+  function on(key, note, vel, ch = 0, source = 'keyboard') {
+    if (!synth || held.has(key) || (ctx && ctx.currentTime < panicUntil)) return;
     const id = nextId++;
-    held.set(key, id);
-    synth.noteOn(id, note, vel, 0);
+    held.set(key, { id: id, note: note, channel: ch, source: source });
+    synth.noteOn(id, note, vel, ch);
     const b = keyEls.get(note); if (b && key.charAt(0) === 'p') b.classList.add('on');
   }
   function off(key, note) {
     if (!synth || !held.has(key)) return;
-    synth.noteOff(held.get(key));
+    synth.noteOff(held.get(key).id);
     held.delete(key);
     const b = keyEls.get(note); if (b) b.classList.remove('on');
+  }
+
+  function releaseMatching(matches) {
+    Array.from(held).forEach(function (entry) {
+      if (matches(entry[1])) off(entry[0], entry[1].note);
+    });
+  }
+  function clearOwnership() {
+    held.clear(); kbNotes.clear();
+    keyEls.forEach(function (b) { b.classList.remove('on'); });
   }
 
   const MAP = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72, o: 73, l: 74, p: 75 };
@@ -99,23 +109,38 @@ pre#log { background:#0e0f12; border:1px solid var(--line); border-radius:6px; p
     b.type = 'button';
     b.textContent = NAMES[n % 12] + (Math.floor(n / 12) - 1);
     if (BLACK.indexOf(n % 12) >= 0) b.className = 's';
-    b.addEventListener('pointerdown', function (e) { b.setPointerCapture(e.pointerId); on('p:' + n, n, 0.8); });
+    b.addEventListener('pointerdown', function (e) { b.setPointerCapture(e.pointerId); on('p:' + n, n, 0.8, 0, 'pointer'); });
     const up = function () { off('p:' + n, n); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
     keyEls.set(n, b); $('keys').append(b);
   }
 
-  function midi(ev) {
+  function midi(ev, inputId) {
     const s = ev.data[0], d1 = ev.data[1], d2 = ev.data[2], t = s & 0xf0, c = s & 0x0f;
-    if (t === 0x90 && d2 > 0) on('m' + c + ':' + d1, d1, d2 / 127);
-    else if (t === 0x80 || (t === 0x90 && d2 === 0)) off('m' + c + ':' + d1, d1);
-    else if (t === 0xb0 && d1 === 123 && synth) synth.allNotesOff();
+    const source = 'midi:' + inputId, key = 'm:' + JSON.stringify([inputId, c, d1]);
+    if (t === 0x90 && d2 > 0) {
+      // MIDI 1.0 repeated noteOn: retrigger this input/channel/pitch only.
+      off(key, d1); on(key, d1, d2 / 127, c, source);
+    }
+    else if (t === 0x80 || (t === 0x90 && d2 === 0)) off(key, d1);
+    else if (t === 0xb0 && d1 === 123) {
+      releaseMatching(function (n) { return n.source === source && n.channel === c; });
+    }
   }
   async function initMidi() {
     if (!navigator.requestMIDIAccess) { log('Web MIDI is not available in this browser (Chrome and Edge have it, Safari does not). Computer keys still work.'); return; }
     try {
       const acc = await navigator.requestMIDIAccess();
-      const hook = function () { acc.inputs.forEach(function (i) { i.onmidimessage = midi; }); };
+      const hook = function (event) {
+        if (event && event.port && event.port.state === 'disconnected') {
+          const source = 'midi:' + event.port.id;
+          releaseMatching(function (n) { return n.source === source; });
+          event.port.onmidimessage = null;
+        }
+        acc.inputs.forEach(function (i) {
+          if (i.state !== 'disconnected') i.onmidimessage = function (ev) { midi(ev, i.id); };
+        });
+      };
       hook(); acc.onstatechange = hook;
       log('MIDI inputs found: ' + acc.inputs.size);
     } catch (e) { log('MIDI permission failed: ' + e.message); }
@@ -145,8 +170,13 @@ pre#log { background:#0e0f12; border:1px solid var(--line); border-radius:6px; p
   }
 
   $('start').addEventListener('click', start);
-  $('allOff').addEventListener('click', function () { if (synth) synth.allNotesOff(); });
-  $('panic').addEventListener('click', function () { if (synth) synth.panic(); });
+  $('allOff').addEventListener('click', function () {
+    if (synth) synth.allNotesOff(); clearOwnership();
+  });
+  $('panic').addEventListener('click', function () {
+    if (synth) { panicUntil = ctx.currentTime + 0.02; synth.panic(); }
+    clearOwnership();
+  });
   $('copy').addEventListener('click', async function () {
     try { await navigator.clipboard.writeText(logEl.textContent); log('Log copied'); }
     catch (e) {
