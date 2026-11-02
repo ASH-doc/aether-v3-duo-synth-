@@ -1,0 +1,19 @@
+[
+{"id":"oct","label":"Octave","group":"osc","min":-2,"max":2,"def":0,"curve":"lin","step":1,"unit":""},
+{"id":"fine","label":"Fine tune","group":"osc","min":-50,"max":50,"def":0,"curve":"lin","step":0,"unit":"cents"},
+{"id":"cutoff","label":"Cutoff","group":"filter","min":20,"max":20000,"def":900,"curve":"log","step":0,"unit":"Hz"},
+{"id":"res","label":"Resonance","group":"filter","min":0,"max":1,"def":0.35,"curve":"lin","step":0,"unit":""},
+{"id":"drive","label":"Drive","group":"filter","min":0,"max":1,"def":0.25,"curve":"lin","step":0,"unit":""},
+{"id":"fenv","label":"Env amount","group":"filter","min":-8,"max":8,"def":3.5,"curve":"lin","step":0,"unit":"oct"},
+{"id":"fvel","label":"Velocity to filter","group":"filter","min":0,"max":1,"def":0.4,"curve":"lin","step":0,"unit":""},
+{"id":"fa","label":"Attack","group":"fenv","min":0.001,"max":10,"def":0.001,"curve":"log","step":0,"unit":"s"},
+{"id":"fd","label":"Decay","group":"fenv","min":0.001,"max":10,"def":0.28,"curve":"log","step":0,"unit":"s"},
+{"id":"fs","label":"Sustain","group":"fenv","min":0,"max":1,"def":0.25,"curve":"lin","step":0,"unit":""},
+{"id":"fr","label":"Release","group":"fenv","min":0.001,"max":10,"def":0.22,"curve":"log","step":0,"unit":"s"},
+{"id":"aa","label":"Attack","group":"aenv","min":0.001,"max":10,"def":0.003,"curve":"log","step":0,"unit":"s"},
+{"id":"ad","label":"Decay","group":"aenv","min":0.001,"max":10,"def":0.4,"curve":"log","step":0,"unit":"s"},
+{"id":"as","label":"Sustain","group":"aenv","min":0,"max":1,"def":0.8,"curve":"lin","step":0,"unit":""},
+{"id":"ar","label":"Release","group":"aenv","min":0.001,"max":10,"def":0.18,"curve":"log","step":0,"unit":"s"},
+{"id":"avel","label":"Velocity to level","group":"aenv","min":0,"max":1,"def":0.5,"curve":"lin","step":0,"unit":""},
+{"id":"vol","label":"Volume","group":"out","min":0,"max":1,"def":0.7,"curve":"lin","step":0,"unit":""}
+]

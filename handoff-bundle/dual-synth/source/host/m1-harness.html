@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synth A M1 test page</title>
+<style>
+:root { color-scheme: dark; --bg:#15161a; --panel:#1e2026; --line:#33363f; --text:#e8e6e1; --dim:#9a9ca6; --a:#e0a24a; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+main { max-width:900px; margin:0 auto; padding:24px 18px 48px; }
+h1 { font-size:1.35rem; margin:0 0 4px; font-weight:650; }
+p { margin:0 0 14px; color:var(--dim); max-width:66ch; }
+.row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:0 0 14px; }
+button { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 14px; cursor:pointer; }
+button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+button:disabled { opacity:.5; cursor:default; }
+#start { font-weight:650; padding:12px 24px; background:var(--text); color:var(--bg); }
+#keys { display:flex; gap:2px; margin:0 0 14px; overflow-x:auto; padding-bottom:6px; }
+#keys button { min-width:34px; height:88px; padding:0; border-radius:0 0 5px 5px; background:#d9d4c7; color:#222; border-color:#8a8576; font-size:11px; display:flex; align-items:flex-end; justify-content:center; touch-action:none; }
+#keys button.s { background:#2b2a27; color:#ddd; height:64px; }
+#keys button.on { background:var(--a); }
+pre#log { background:#0e0f12; border:1px solid var(--line); border-radius:6px; padding:12px; height:200px; overflow:auto; font:13px/1.45 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; margin:0 0 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Synth A, M1 test page</h1>
+  <p>A throwaway test harness, not the real host. Turn your system volume down before pressing START AUDIO: with high resonance and drive the filter can get loud.</p>
+  <div class="row"><button id="start" type="button">START AUDIO</button><span id="ctxState">Audio not started.</span></div>
+  <div id="mount"></div>
+  <h2 style="font-size:1rem;margin:18px 0 8px">Play</h2>
+  <p>Computer keys A W S E D F T G Y H U J K O L P play from middle C. Z and X move the octave down and up. A MIDI keyboard works in Chrome or Edge.</p>
+  <div id="keys" aria-label="On-screen keyboard"></div>
+  <div class="row"><button id="allOff" type="button">All notes off</button><button id="panic" type="button">Panic</button></div>
+  <h2 style="font-size:1rem;margin:18px 0 8px">Log</h2>
+  <pre id="log" aria-live="polite"></pre>
+  <div class="row"><button id="copy" type="button">Copy log</button></div>
+</main>
+
+<script type="text/plain" id="src-a">{{WORKLET_A}}</script>
+<script>
+{{PANEL_A}}
+</script>
+<script id="harness-main">
+(function () {
+  'use strict';
+  const $ = function (id) { return document.getElementById(id); };
+  const logEl = $('log');
+  const t0 = performance.now();
+  function log(m) {
+    logEl.textContent += '[' + ((performance.now() - t0) / 1000).toFixed(2) + 's] ' + m + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  let ctx = null, synth = null, started = false, nextId = 1, shift = 0;
+  const held = new Map();
+  const keyEls = new Map();
+
+  function on(key, note, vel) {
+    if (!synth || held.has(key)) return;
+    const id = nextId++;
+    held.set(key, id);
+    synth.noteOn(id, note, vel, 0);
+    const b = keyEls.get(note); if (b && key.charAt(0) === 'p') b.classList.add('on');
+  }
+  function off(key, note) {
+    if (!synth || !held.has(key)) return;
+    synth.noteOff(held.get(key));
+    held.delete(key);
+    const b = keyEls.get(note); if (b) b.classList.remove('on');
+  }
+
+  const MAP = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72, o: 73, l: 74, p: 75 };
+  const kbNotes = new Map();
+  window.addEventListener('keydown', function (e) {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z') { shift = Math.max(-24, shift - 12); log('Octave shift ' + shift); return; }
+    if (k === 'x') { shift = Math.min(24, shift + 12); log('Octave shift ' + shift); return; }
+    if (MAP[k] === undefined || kbNotes.has(k)) return;
+    const note = MAP[k] + shift;
+    kbNotes.set(k, note);
+    on('k:' + k, note, 0.8);
+  });
+  window.addEventListener('keyup', function (e) {
+    const k = e.key.toLowerCase();
+    if (!kbNotes.has(k)) return;
+    off('k:' + k, kbNotes.get(k)); kbNotes.delete(k);
+  });
+  window.addEventListener('blur', function () {
+    kbNotes.forEach(function (note, k) { off('k:' + k, note); });
+    kbNotes.clear();
+  });
+
+  const BLACK = [1, 3, 6, 8, 10];
+  const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  for (let n = 48; n <= 72; n++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = NAMES[n % 12] + (Math.floor(n / 12) - 1);
+    if (BLACK.indexOf(n % 12) >= 0) b.className = 's';
+    b.addEventListener('pointerdown', function (e) { b.setPointerCapture(e.pointerId); on('p:' + n, n, 0.8); });
+    const up = function () { off('p:' + n, n); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    keyEls.set(n, b); $('keys').append(b);
+  }
+
+  function midi(ev) {
+    const s = ev.data[0], d1 = ev.data[1], d2 = ev.data[2], t = s & 0xf0, c = s & 0x0f;
+    if (t === 0x90 && d2 > 0) on('m' + c + ':' + d1, d1, d2 / 127);
+    else if (t === 0x80 || (t === 0x90 && d2 === 0)) off('m' + c + ':' + d1, d1);
+    else if (t === 0xb0 && d1 === 123 && synth) synth.allNotesOff();
+  }
+  async function initMidi() {
+    if (!navigator.requestMIDIAccess) { log('Web MIDI is not available in this browser (Chrome and Edge have it, Safari does not). Computer keys still work.'); return; }
+    try {
+      const acc = await navigator.requestMIDIAccess();
+      const hook = function () { acc.inputs.forEach(function (i) { i.onmidimessage = midi; }); };
+      hook(); acc.onstatechange = hook;
+      log('MIDI inputs found: ' + acc.inputs.size);
+    } catch (e) { log('MIDI permission failed: ' + e.message); }
+  }
+
+  async function start() {
+    if (started) return;
+    started = true; $('start').disabled = true;
+    log('Protocol: ' + location.protocol + ', secure context: ' + window.isSecureContext);
+    log('Browser: ' + navigator.userAgent);
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) { log('FAILED: no AudioContext in this browser'); return; }
+    ctx = new Ctor({ latencyHint: 'interactive' });
+    ctx.addEventListener('statechange', function () { $('ctxState').textContent = 'Audio ' + ctx.state + ' at ' + ctx.sampleRate + ' Hz'; log('AudioContext state: ' + ctx.state); });
+    try { await ctx.resume(); } catch (e) { log('resume() failed: ' + e.message); }
+    log('AudioContext state: ' + ctx.state + ', sample rate ' + ctx.sampleRate + ' Hz');
+    $('ctxState').textContent = 'Audio ' + ctx.state + ' at ' + ctx.sampleRate + ' Hz';
+    if (!ctx.audioWorklet) { log('FAILED: AudioWorklet is not available here'); return; }
+    try {
+      synth = await SynthA.create(ctx, $('src-a').textContent, log);
+      const master = ctx.createGain(); master.gain.value = 0.8;
+      synth.node.connect(master); master.connect(ctx.destination);
+      $('mount').append(synth.panel);
+      log('Engine A ready. Play a note.');
+    } catch (e) { log('Engine A FAILED: ' + (e && e.message ? e.message : e)); }
+    initMidi();
+  }
+
+  $('start').addEventListener('click', start);
+  $('allOff').addEventListener('click', function () { if (synth) synth.allNotesOff(); });
+  $('panic').addEventListener('click', function () { if (synth) synth.panic(); });
+  $('copy').addEventListener('click', async function () {
+    try { await navigator.clipboard.writeText(logEl.textContent); log('Log copied'); }
+    catch (e) {
+      log('Clipboard blocked, log text selected: press Ctrl+C or Cmd+C');
+      const r = document.createRange(); r.selectNodeContents(logEl);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+  });
+  log('M1 test page loaded');
+})();
+</script>
+</body>
+</html>

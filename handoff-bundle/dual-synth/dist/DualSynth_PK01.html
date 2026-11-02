@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dual Synth PK-01 packaging test</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #15161a;
+  --panel: #1e2026;
+  --line: #33363f;
+  --text: #e8e6e1;
+  --dim: #9a9ca6;
+  --a: #e0a24a;
+  --b: #6cc7dc;
+  --bad: #e5645a;
+  --ok: #7cc98a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 28px 20px 48px; }
+h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; }
+p { margin: 0 0 16px; color: var(--dim); max-width: 62ch; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 16px; }
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--dim); }
+button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: default; }
+#start { font-weight: 650; padding: 12px 24px; background: var(--text); color: var(--bg); border-color: var(--text); }
+#start:disabled { background: var(--panel); color: var(--dim); border-color: var(--line); }
+button[role="tab"][aria-selected="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+button[aria-pressed="true"] { background: var(--bad); border-color: var(--bad); color: #1a0a08; }
+#ctxState { color: var(--dim); }
+section.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 0 0 16px;
+}
+section.panel[hidden] { display: none; }
+#panel-a { border-left-color: var(--a); }
+#panel-b { border-left-color: var(--b); }
+section.panel h2 { font-size: 1.05rem; margin: 0 0 4px; font-weight: 650; }
+section.panel p { margin: 0 0 6px; }
+.status { font-weight: 650; color: var(--dim); }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+h3 { font-size: 1rem; margin: 24px 0 8px; font-weight: 650; }
+pre#log {
+  background: #0e0f12;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 0 0 10px;
+  height: 280px;
+  overflow: auto;
+  font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Dual Synth, PK-01 packaging test</h1>
+  <p>This page only proves the packaging: two separate sound engines, each loaded from its own embedded module, sharing one audio context. Nothing here is the real instrument yet.</p>
+
+  <div class="row">
+    <button id="start" type="button">START AUDIO</button>
+    <span id="ctxState">Audio not started. Press START AUDIO.</span>
+  </div>
+
+  <div class="row" role="tablist" aria-label="Panel">
+    <button id="tab-a" type="button" role="tab" aria-selected="true">Show A</button>
+    <button id="tab-b" type="button" role="tab" aria-selected="false">Show B</button>
+  </div>
+
+  <section id="panel-a" class="panel">
+    <h2>Engine A (test tone)</h2>
+    <p>220 Hz sine, about -20 dBFS, stereo.</p>
+    <p>Status: <span id="st-a" class="status">not loaded</span></p>
+  </section>
+  <section id="panel-b" class="panel" hidden>
+    <h2>Engine B (placeholder)</h2>
+    <p>330 Hz triangle, about -20 dBFS, stereo. A stand-in until the real engine B arrives.</p>
+    <p>Status: <span id="st-b" class="status">not loaded</span></p>
+  </section>
+
+  <div class="row">
+    <button id="mute-a" type="button" aria-pressed="false">Mute A</button>
+    <button id="mute-b" type="button" aria-pressed="false">Mute B</button>
+  </div>
+
+  <h3>Log</h3>
+  <pre id="log" aria-live="polite"></pre>
+  <div class="row"><button id="copy" type="button">Copy log</button></div>
+</main>
+
+<script type="text/plain" id="src-a">(function () {
+  'use strict';
+
+  // PK-01 test tone for engine A. Packaging proof only, not the real instrument.
+  const FREQ = 220;
+  const LEVEL = 0.1; // about -20 dBFS
+
+  class VaTestTone extends AudioWorkletProcessor {
+    constructor() {
+      super();
+      this.phase = 0;
+    }
+
+    process(inputs, outputs) {
+      const out = outputs[0];
+      const left = out[0];
+      const right = out.length > 1 ? out[1] : null;
+      const inc = FREQ / sampleRate;
+      let ph = this.phase;
+      for (let i = 0; i < left.length; i++) {
+        const s = Math.sin(6.283185307179586 * ph) * LEVEL;
+        left[i] = s;
+        if (right) right[i] = s;
+        ph += inc;
+        if (ph >= 1) ph -= 1;
+      }
+      this.phase = ph;
+      return true;
+    }
+  }
+
+  registerProcessor('va-pk01', VaTestTone);
+})();
+</script>
+<script type="text/plain" id="src-b">(function () {
+  'use strict';
+
+  // PK-01 placeholder for engine B. Written only to prove packaging.
+  // The real engine B replaces this file.
+  const FREQ = 330;
+  const LEVEL = 0.1; // about -20 dBFS
+
+  class WtTestTone extends AudioWorkletProcessor {
+    constructor() {
+      super();
+      this.phase = 0;
+    }
+
+    process(inputs, outputs) {
+      const out = outputs[0];
+      const left = out[0];
+      const right = out.length > 1 ? out[1] : null;
+      const inc = FREQ / sampleRate;
+      let ph = this.phase;
+      for (let i = 0; i < left.length; i++) {
+        // triangle, offset so the first sample is zero (no step at start)
+        let p = ph + 0.25;
+        p -= Math.floor(p);
+        const s = (4 * Math.abs(p - 0.5) - 1) * LEVEL;
+        left[i] = s;
+        if (right) right[i] = s;
+        ph += inc;
+        if (ph >= 1) ph -= 1;
+      }
+      this.phase = ph;
+      return true;
+    }
+  }
+
+  registerProcessor('wt-pk01', WtTestTone);
+})();
+</script>
+
+<script id="host-main">
+(function () {
+  'use strict';
+
+  const $ = function (id) { return document.getElementById(id); };
+  const logEl = $('log');
+  const t0 = performance.now();
+
+  function log(msg) {
+    const t = ((performance.now() - t0) / 1000).toFixed(2);
+    logEl.textContent += '[' + t + 's] ' + msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function describe(err) {
+    return (err && (err.name ? err.name + ': ' : '') + (err.message || err)) || String(err);
+  }
+
+  let ctx = null;
+  let master = null;
+  let started = false;
+
+  const engines = {
+    A: { src: 'src-a', reg: 'va-pk01', muted: false, node: null, gain: null, ok: null },
+    B: { src: 'src-b', reg: 'wt-pk01', muted: false, node: null, gain: null, ok: null }
+  };
+
+  function setStatus(key, text, cls) {
+    const el = $('st-' + key.toLowerCase());
+    el.textContent = text;
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function showState() {
+    if (!ctx) { return; }
+    $('ctxState').textContent = 'Audio ' + ctx.state + ' at ' + ctx.sampleRate + ' Hz';
+  }
+
+  function applyGain(key) {
+    const e = engines[key];
+    if (!e.gain || !ctx) { return; }
+    e.gain.gain.setTargetAtTime(e.muted ? 0 : 1, ctx.currentTime, 0.012);
+  }
+
+  async function loadEngine(key) {
+    const e = engines[key];
+    setStatus(key, 'loading', '');
+    let url = null;
+    try {
+      const text = $(e.src).textContent;
+      url = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
+      await ctx.audioWorklet.addModule(url);
+      log('Engine ' + key + ': module loaded, registered as ' + e.reg);
+    } catch (err) {
+      e.ok = false;
+      setStatus(key, 'module failed', 'bad');
+      log('Engine ' + key + ': module FAILED: ' + describe(err));
+      return;
+    } finally {
+      if (url) { URL.revokeObjectURL(url); }
+    }
+    try {
+      const node = new AudioWorkletNode(ctx, e.reg, {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2]
+      });
+      node.onprocessorerror = function () {
+        setStatus(key, 'processor error', 'bad');
+        log('Engine ' + key + ': processor error reported by the browser');
+      };
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      node.connect(gain);
+      gain.connect(master);
+      e.node = node;
+      e.gain = gain;
+      e.ok = true;
+      applyGain(key);
+      setStatus(key, 'running', 'ok');
+      log('Engine ' + key + ': node created (stereo out), connected to the host mixer');
+    } catch (err) {
+      e.ok = false;
+      setStatus(key, 'node failed', 'bad');
+      log('Engine ' + key + ': node creation FAILED: ' + describe(err));
+    }
+  }
+
+  async function start() {
+    if (started) { return; }
+    started = true;
+    $('start').disabled = true;
+
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) {
+      log('FAILED: this browser has no AudioContext');
+      return;
+    }
+    try {
+      ctx = new Ctor({ latencyHint: 'interactive' });
+    } catch (err) {
+      log('FAILED to create AudioContext: ' + describe(err));
+      return;
+    }
+    log('AudioContext created, sample rate ' + ctx.sampleRate + ' Hz, base latency ' +
+        (typeof ctx.baseLatency === 'number' ? (ctx.baseLatency * 1000).toFixed(1) + ' ms' : 'not reported'));
+    log('AudioContext state: ' + ctx.state);
+    ctx.addEventListener('statechange', function () {
+      log('AudioContext state changed: ' + ctx.state);
+      showState();
+    });
+    if (!ctx.audioWorklet) {
+      log('FAILED: AudioWorklet is not available in this page');
+      return;
+    }
+
+    master = ctx.createGain();
+    master.connect(ctx.destination);
+    try {
+      await ctx.resume();
+    } catch (err) {
+      log('resume() failed: ' + describe(err));
+    }
+
+    // Each engine loads on its own; a failure in one does not stop the other.
+    await loadEngine('A');
+    await loadEngine('B');
+
+    log('Load results: A ' + (engines.A.ok ? 'loaded' : 'FAILED') + ', B ' + (engines.B.ok ? 'loaded' : 'FAILED'));
+    log('AudioContext state: ' + ctx.state);
+    showState();
+  }
+
+  function toggleMute(key) {
+    const e = engines[key];
+    e.muted = !e.muted;
+    $('mute-' + key.toLowerCase()).setAttribute('aria-pressed', String(e.muted));
+    applyGain(key);
+    log('Engine ' + key + (e.muted ? ' muted' : ' unmuted') + ' (host gain only, the engine keeps running)');
+  }
+
+  function show(key) {
+    ['A', 'B'].forEach(function (k) {
+      const on = (k === key);
+      $('panel-' + k.toLowerCase()).hidden = !on;
+      $('tab-' + k.toLowerCase()).setAttribute('aria-selected', String(on));
+    });
+    log('Showing panel ' + key + (ctx ? ' (engines untouched, context ' + ctx.state + ')' : ''));
+  }
+
+  async function copyLog() {
+    try {
+      await navigator.clipboard.writeText(logEl.textContent);
+      log('Log copied to the clipboard');
+    } catch (err) {
+      log('Clipboard blocked, log text selected: press Ctrl+C (Windows) or Cmd+C (Mac)');
+      const range = document.createRange();
+      range.selectNodeContents(logEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+
+  $('start').addEventListener('click', start);
+  $('tab-a').addEventListener('click', function () { show('A'); });
+  $('tab-b').addEventListener('click', function () { show('B'); });
+  $('mute-a').addEventListener('click', function () { toggleMute('A'); });
+  $('mute-b').addEventListener('click', function () { toggleMute('B'); });
+  $('copy').addEventListener('click', copyLog);
+
+  log('PK-01 page loaded');
+  log('Protocol: ' + location.protocol);
+  log('Secure context: ' + window.isSecureContext);
+  log('Browser: ' + navigator.userAgent);
+  log('AudioWorklet available: ' +
+      (typeof AudioContext !== 'undefined' && 'audioWorklet' in AudioContext.prototype));
+  log('This page makes no network requests and loads no outside files.');
+})();
+</script>
+</body>
+</html>
